@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Select Level</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>{{language}} Levels ⚔️</h1>
+
+<form action="/start" method="POST">
+
+{% for level in levels %}
+
+<button name="level" value="{{level}}">
+Level {{level}}
+</button>
+
+<br><br>
+
+{% endfor %}
+
+</form>
+
+</div>
+
+</body>
+
+</html>

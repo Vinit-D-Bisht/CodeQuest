@@ -1,0 +1,9 @@
+<h1>🏆 Leaderboard</h1>
+
+{% for player in scores %}
+
+<h3>
+{{loop.index}}. {{player.name}} - {{player.xp}} XP
+</h3>
+
+{% endfor %}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Quiz - CodeQuest</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>{{language}} Quest ⚔️</h1>
+
+<form action="/submit" method="POST">
+
+{% for q in questions %}
+
+<div class="question">
+
+<h3>{{loop.index}}. {{q.question}}</h3>
+
+{% for option in q.options %}
+
+<label>
+
+<input 
+type="radio" 
+name="{{q.question}}" 
+value="{{option}}" 
+required>
+
+{{option}}
+
+</label>
+
+<br>
+
+{% endfor %}
+
+</div>
+
+{% endfor %}
+
+<button type="submit">
+Submit Answers 🚀
+</button>
+
+</form>
+
+</div>
+
+</body>
+
+</html>
