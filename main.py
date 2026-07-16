@@ -1,5 +1,4 @@
-from ui import home,root,splash
+from ui import root, splash, home
 
-home()
 splash.show(root, home)
 root.mainloop()

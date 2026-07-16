@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import game,save,achievements,leaderboard,stats,shop,sound,rank,splash,settings
+import game,save,achievements,leaderboard,stats,shop,sound,rank,splash,settings,random
+from datetime import date
 from constants import *
 
 root = tk.Tk()
@@ -10,12 +11,14 @@ root.configure(bg=BG)
 
 # Press ESC to exit fullscreen
 root.bind("<Escape>", lambda e: root.attributes("-fullscreen", False))
-
+lifeline_used = False
+question_locked = False
 selected_language = ""
 level = 1
 score = 0
 current_question = 0
 questions = []
+player = {}
 
 selected_option = tk.StringVar()
 
@@ -32,8 +35,50 @@ def hover_effect(button, normal, hover):
     button.bind("<Enter>", lambda e: button.config(bg=hover))
     button.bind("<Leave>", lambda e: button.config(bg=normal))
 
+def create_card(parent):
+    card = tk.Frame(
+        parent,
+        bg=CARD,
+        highlightbackground=CARD2,
+        highlightthickness=2,
+        bd=0
+    )
+    return card
+
+def menu_button(parent, text, color, command):
+
+    b = tk.Button(
+        parent,
+        text=text,
+        font=("Segoe UI",16,"bold"),
+        bg=color,
+        fg="white",
+        activebackground=color,
+        activeforeground="white",
+        bd=0,
+        width=18,
+        height=2,
+        cursor="hand2",
+        command=command
+    )
+
+    b.bind("<Enter>",lambda e:b.config(font=("Segoe UI",17,"bold")))
+    b.bind("<Leave>",lambda e:b.config(font=("Segoe UI",16,"bold")))
+
+    return b
+
 def name_screen():
     clear()
+
+    # If a player name is already saved, skip the name screen.
+    global player_name
+    try:
+        saved_player = save.load_data().get("player", "")
+    except Exception:
+        saved_player = ""
+    if saved_player:
+        player_name = saved_player
+        return language_screen()
 
     tk.Label(
         root,
@@ -42,6 +87,7 @@ def name_screen():
         bg=BG,
         fg=GREEN
     ).pack(pady=30)
+
 
     tk.Label(
         root,
@@ -58,17 +104,13 @@ def name_screen():
         justify="center"
     )
     name_entry.pack(pady=20)
-
     def save_name():
         global player_name
 
         player_name = name_entry.get().strip()
 
-        if player_name == "":
-            messagebox.showwarning(
-                "Warning",
-                "Please enter your name."
-            )
+        if not player_name:
+            messagebox.showwarning("Warning", "Please enter your name.")
             return
 
         player = save.load_data()
@@ -80,15 +122,10 @@ def name_screen():
     continue_btn = tk.Button(
         root,
         text="Continue ➜",
-        font=("Arial", 16, "bold"),
-        bg=GREEN,
-        fg=WHITE,
-        width=15,
         command=save_name
     )
+    continue_btn.pack(pady=20)
 
-    hover_effect(continue_btn, GREEN, "#2ECC71")
-    continue_btn.pack(pady=25)
 
 def show_question():
     clear()
@@ -121,16 +158,24 @@ def show_question():
         bg=BG
     ).pack(pady=10)
 
+    # Always create timer_label so game.countdown() never crashes.
+    timer_label = tk.Label(
+        root,
+        text="⏳ 30s" if settings.load()["timer"] else "⏳ OFF",
+        font=("Arial", 16, "bold"),
+        fg=YELLOW,
+        bg=BG
+    )
     if settings.load()["timer"]:
-        timer_label = tk.Label(
-            root,
-            text="⏳ 30s",
-            font=("Arial", 16, "bold"),
-            fg=YELLOW,
-            bg=BG
-        )
         timer_label.pack()
 
+    tk.Label(
+        root,
+        text=f"Category : {selected_language}",
+        font=("Arial",12),
+        bg=BG,
+        fg="cyan"
+        ).pack()
     tk.Label(
         root,
         text=f"Question {current_question + 1}/5",
@@ -169,7 +214,7 @@ def show_question():
         bg=GREEN,
         fg=WHITE,
         width=15,
-        command=game.next_question
+        command=game.submit_answer
     )
 
     hover_effect(next_btn, GREEN, "#2ECC71")
@@ -194,7 +239,26 @@ def show_question():
     feedback_label.pack(pady=10)
 
     if settings.load()["timer"]:
+        # Ensure timer is initialized before countdown starts
         game.countdown()
+
+    
+    tk.Button(
+        root,
+        text="50-50",
+        font=("Arial",12,"bold"),
+        bg="purple",
+        fg="white",
+        command=game.fifty_fifty
+    ).pack()
+    tk.Button(
+        root,
+        text="Skip",
+        font=("Arial",12,"bold"),
+        bg="orange",
+        fg="white",
+        command=game.skip_question
+    ).pack()
 
 def show_result():
     clear()
@@ -208,7 +272,13 @@ def show_result():
     if settings.load()["sound"]:
         sound.win.play()
 
-    leaderboard.save(player_name, score)
+    if score == 5:
+        player["xp"] += 50
+        save.save_data(player)
+
+    if player_name:
+        leaderboard.save(player_name, score)
+
     badges = achievements.check(player, score, level)
 
     tk.Label(
@@ -226,6 +296,15 @@ def show_result():
         fg=WHITE,
         bg=BG
     ).pack()
+    stars="⭐"*score
+
+    tk.Label(
+        root,
+        text=stars,
+        font=("Arial",30),
+        bg=BG,
+        fg="gold"
+    ).pack()
 
     tk.Label(
         root,
@@ -234,6 +313,15 @@ def show_result():
         fg=YELLOW,
         bg=BG
     ).pack(pady=15)
+    coins = score * 5
+
+    tk.Label(
+        root,
+        text=f"🪙 +{coins} Coins Earned",
+        font=("Arial",18,"bold"),
+        bg=BG,
+        fg="gold"
+    ).pack()
 
     tk.Label(
         root,
@@ -258,6 +346,14 @@ def show_result():
         fg=WHITE,
         bg=BG
     ).pack()
+    if score==5:
+        tk.Label(
+            root,
+            text="🔥 PERFECT SCORE BONUS +50 XP",
+            font=("Arial",18,"bold"),
+            fg="orange",
+            bg=BG
+        ).pack()
 
     tk.Label(
         root,
@@ -276,7 +372,7 @@ def show_result():
             bg=BG
         ).pack(pady=(15, 5))
 
-        for badge in badges:
+        for badge in badges[:3]:
             tk.Label(
                 root,
                 text=badge,
@@ -342,7 +438,12 @@ def language_screen():
 
     tk.Label(
         root,
-        text=f"Welcome, {player_name} 👋",
+    text=random.choice([
+        f"Welcome {player_name} 👋",
+        f"Good Luck {player_name} 🔥",
+        f"Ready To Code {player_name}? 🚀",
+        f"Let's Win {player_name}! ⚔"
+        ]),
         font=("Arial", 16, "bold"),
         fg=WHITE,
         bg=BG
@@ -401,180 +502,215 @@ def language_screen():
     back_btn.pack(pady=20)
 
 def home():
-    clear()
 
+    clear()
+    global player_name
     player = save.load_data()
-    badges = achievements.check(player)
-    player_rank = rank.get_rank(player["xp"])
+    player_name = player.get("player", "")
+    today = str(date.today())
+
+    if player.get("last_reward") != today:
+        player["last_reward"] = today
+        player["coins"] += 20
+        save.save_data(player)
+
     game_stats = stats.load()
     accuracy = stats.accuracy()
-    board = leaderboard.load()
+    player_rank = rank.get_rank(player["xp"])
+
+    root.configure(bg=DARK)
+
+    # ---------------- TITLE ----------------
 
     tk.Label(
         root,
         text="⚔ CODEQUEST ⚔",
-        font=("Arial", 34, "bold"),
+        font=("Segoe UI",36,"bold"),
         fg=GREEN,
-        bg=BG
-    ).pack(pady=25)
+        bg=DARK
+    ).pack(pady=15)
 
     tk.Label(
         root,
-        text="Master the Code. Conquer the Quest.",
-        font=("Arial", 16),
-        fg=WHITE,
-        bg=BG
+        text="Master The Code • Conquer The Quest",
+        font=("Segoe UI",15),
+        fg="white",
+        bg=DARK
+    ).pack()
+
+    # ================= MAIN =================
+
+    body = tk.Frame(root,bg=DARK)
+    body.pack(pady=25)
+
+    # ========= LEFT =========
+
+    left = tk.Frame(body,bg=DARK)
+    left.grid(row=0,column=0,padx=30)
+
+    card = create_card(left)
+    card.pack()
+
+    tk.Label(
+        card,
+        text=f"{player.get('avatar', '😎')}  {player.get('player', 'Player')}",
+        font=("Segoe UI",22,"bold"),
+        bg=CARD,
+        fg="white"
+    ).pack(pady=(15,5))
+
+    tk.Label(
+        card,
+        text=player_rank,
+        font=("Segoe UI",15,"bold"),
+        fg=GREEN,
+        bg=CARD
     ).pack()
 
     tk.Label(
-        root,
-        text=f"👤 {player['player']}",
-        font=("Arial", 15, "bold"),
-        fg=WHITE,
-        bg=BG
-    ).pack(pady=(20, 5))
+        card,
+        text=f"⭐ XP {player['xp']}      🪙 {player['coins']}",
+        font=("Segoe UI",15),
+        bg=CARD,
+        fg="gold"
+    ).pack(pady=5)
+
+    ttk.Progressbar(
+        card,
+        length=300,
+        maximum=1000,
+        value=player["xp"]
+    ).pack(pady=10)
+
+    tk.Label(
+        card,
+        text=f"🎮 {game_stats['games_played']} Games",
+        font=("Segoe UI",13),
+        bg=CARD,
+        fg="white"
+    ).pack()
+
+    tk.Label(
+        card,
+        text=f"🎯 {accuracy}% Accuracy",
+        font=("Segoe UI",13),
+        bg=CARD,
+        fg="white"
+    ).pack(pady=(0,15))
+
+    # ========= MENU =========
+
+    menu = tk.Frame(left,bg=DARK)
+    menu.pack(pady=25)
+
+    menu_button(menu,"▶ START QUEST",GREEN,name_screen).grid(row=0,column=0,padx=10,pady=10)
+
+    menu_button(menu,"📊 Statistics",BLUE,stats_screen).grid(row=0,column=1,padx=10,pady=10)
+
+    menu_button(menu,"🏆 Leaderboard",ORANGE,leaderboard_screen).grid(row=1,column=0,padx=10,pady=10)
+
+    menu_button(menu,"🛒 Shop","#8B5CF6",shop_screen).grid(row=1,column=1,padx=10,pady=10)
+
+    menu_button(menu,"⚙ Settings","#555555",settings_screen).grid(
+        row=2,
+        column=0,
+        columnspan=2,
+        pady=10
+    )
+
+    # Exit button: keep it inside left column below the menu.
+    # This avoids mixed pack/grid layout + fullscreen clipping issues.
+    exit_btn = tk.Button(
+        left,
+        text="❌ Exit",
+        bg="red",
+        fg="white",
+        font=("Segoe UI",13,"bold"),
+        width=18,
+        command=root.destroy
+    )
+    exit_btn.pack(pady=10)
+
+
+    # ========= RIGHT =========
+
+
+    right = create_card(body)
+    right.grid(row=0,column=1,padx=25,sticky="n")
+
+    tk.Label(
+        right,
+        text="🏆 TOP PLAYERS",
+        font=("Segoe UI",18,"bold"),
+        fg=GREEN,
+        bg=CARD
+    ).pack(pady=10)
+
+    board = leaderboard.load()[:5]
+
+    medals=["🥇","🥈","🥉","4️⃣","5️⃣"]
+
+    if board:
+
+        for i,p in enumerate(board):
+
+            tk.Label(
+                right,
+                text=f"{medals[i]}  {p['name']}",
+                font=("Segoe UI",13,"bold"),
+                bg=CARD,
+                fg="white"
+            ).pack(anchor="w",padx=20)
+
+            tk.Label(
+                right,
+                text=f"Score : {p['score']}/5",
+                font=("Segoe UI",11),
+                bg=CARD,
+                fg="gold"
+            ).pack(anchor="w",padx=45,pady=(0,8))
+
+    else:
+
+        tk.Label(
+            right,
+            text="No scores yet",
+            font=("Segoe UI",13),
+            bg=CARD,
+            fg="white"
+        ).pack(pady=20)
+
+    tips = [
+        "💡 Practice daily",
+        "💡 Debug patiently",
+        "💡 Build projects",
+        "💡 Read errors carefully"
+    ]
 
     tk.Label(
         root,
-        text=f"🏆 Rank: {player_rank}\n⭐ XP: {player['xp']}    🪙 Coins: {player['coins']}",
-        font=("Arial", 14),
-        fg=YELLOW,
-        bg=BG
+        text=random.choice(tips),
+        font=("Segoe UI",12),
+        fg="cyan",
+        bg=DARK
     ).pack(pady=10)
 
     tk.Label(
         root,
-        text="🏅 Achievements",
-        font=("Arial", 15, "bold"),
-        fg=GREEN,
-        bg=BG
-    ).pack(pady=(15, 5))
+        text="CodeQuest v1.0",
+        font=("Segoe UI",10),
+        fg="gray",
+        bg=DARK
+    ).pack(side="bottom",pady=8)
 
-    if badges:
-        for badge in badges:
-            tk.Label(
-                root,
-                text=badge,
-                font=("Arial", 13),
-                fg=YELLOW,
-                bg=BG
-            ).pack()
-    else:
-        tk.Label(
-            root,
-            text="No achievements yet.",
-            font=("Arial", 13),
-            fg=WHITE,
-            bg=BG
-        ).pack()
-
-    tk.Label(
-        root,
-        text=f"🎮 Games Played: {game_stats['games_played']}",
-        font=("Arial", 13),
-        fg=WHITE,
-        bg=BG
-    ).pack(pady=(15, 2))
-
-    tk.Label(
-        root,
-        text=f"🎯 Accuracy: {accuracy}%",
-        font=("Arial", 13),
-        fg=WHITE,
-        bg=BG
-    ).pack()
-
-    tk.Label(
-        root,
-        text="🏆 Top Players",
-        font=("Arial", 18, "bold"),
-        fg=GREEN,
-        bg=BG
-    ).pack(pady=(20, 10))
-
-    if board:
-        for i, entry in enumerate(board[:3], start=1):
-            tk.Label(
-                root,
-                text=f"{i}. {entry['name']} - {entry['score']}/5",
-                font=("Arial", 13),
-                fg=WHITE,
-                bg=BG
-            ).pack()
-    else:
-        tk.Label(
-            root,
-            text="No scores yet.",
-            font=("Arial", 13),
-            fg=WHITE,
-            bg=BG
-        ).pack()
-
-    start_btn = tk.Button(
-        root,
-        text="START",
-        font=("Arial", 18, "bold"),
-        width=15,
-        height=2,
-        bg=GREEN,
-        fg=WHITE,
-        command=name_screen
-    )
-    hover_effect(start_btn, GREEN, "#2ECC71")
-    start_btn.pack(pady=25)
-
-    stats_btn = tk.Button(
-        root,
-        text="📊 Statistics",
-        font=("Arial", 14, "bold"),
-        width=15,
-        bg=BLUE,
-        fg=WHITE,
-        command=stats_screen
-    )
-    hover_effect(stats_btn, BLUE, "#4A90E2")
-    stats_btn.pack(pady=5)
-
-    leader_btn = tk.Button(
-        root,
-        text="🏆 Leaderboard",
-        font=("Arial", 14, "bold"),
-        width=15,
-        bg=ORANGE,
-        fg=WHITE,
-        command=leaderboard_screen
-    )
-    hover_effect(leader_btn, ORANGE, "#F39C12")
-    leader_btn.pack(pady=5)
-
-    shop_btn = tk.Button(
-        root,
-        text="🛒 Shop",
-        font=("Arial", 14, "bold"),
-        width=15,
-        bg=BLUE,
-        fg=WHITE,
-        command=shop_screen
-    )
-    hover_effect(shop_btn, BLUE, "#4A90E2")
-    shop_btn.pack(pady=5)
-
-    settings_btn = tk.Button(
-        root,
-        text="⚙ Settings",
-        font=("Arial", 14, "bold"),
-        width=15,
-        bg=GRAY,
-        fg=WHITE,
-        command=settings_screen
-    )
-    hover_effect(settings_btn, GRAY, "#7F8C8D")
-    settings_btn.pack(pady=5)
 
 def game_complete():
     clear()
 
     player = save.load_data()
+    if "avatar" not in player:
+        player["avatar"] = "😎"
+        save.save_data(player)
     player_rank = rank.get_rank(player["xp"])
 
     tk.Label(
@@ -608,6 +744,12 @@ def game_complete():
         fg=YELLOW,
         bg=BG
     ).pack(pady=5)
+    ttk.Progressbar(
+        root,
+        length=350,
+        maximum=1000,
+        value=player["xp"]
+    ).pack(pady=10)
 
     tk.Label(
         root,
@@ -652,6 +794,14 @@ def game_complete():
     )
     hover_effect(exit_btn, GRAY, "#7F8C8D")
     exit_btn.pack(pady=10)
+
+    tk.Label(
+        root,
+        text="🏅 Certified CodeQuest Explorer",
+        font=("Arial",22,"bold"),
+        fg="gold",
+        bg=BG
+    ).pack(pady=20)
 
 def shop_screen():
     clear()
@@ -709,6 +859,12 @@ def buy_item(item):
         return
 
     player["coins"] -= item["price"]
+
+    if "Golden Badge" in item["name"]:
+        player["avatar"] = "👑"
+    elif "XP Booster" in item["name"]:
+        player["xp"] += 50
+
     save.save_data(player)
 
     messagebox.showinfo(
@@ -732,7 +888,7 @@ def settings_screen():
         font=("Arial", 28, "bold"),
         fg=GREEN,
         bg=BG
-    ).pack(pady=30)
+    ).pack(pady=10)
 
     tk.Checkbutton(
         root,
@@ -742,7 +898,7 @@ def settings_screen():
         bg=BG,
         fg=WHITE,
         selectcolor=BG
-    ).pack(pady=10)
+    ).pack(pady=5)
 
     tk.Checkbutton(
         root,
@@ -752,7 +908,7 @@ def settings_screen():
         bg=BG,
         fg=WHITE,
         selectcolor=BG
-    ).pack(pady=10)
+    ).pack(pady=5)
 
     def save_settings():
         settings.save({
@@ -760,7 +916,23 @@ def settings_screen():
             "timer": timer_var.get()
         })
         messagebox.showinfo("Settings", "Settings saved!")
-
+    def reset_game():
+        if messagebox.askyesno("Reset", "Delete all progress?"):
+            save.save_data(save.DEFAULT.copy())
+            stats.save(stats.DEFAULT.copy())
+            leaderboard.save_all([])
+            settings.save(settings.DEFAULT.copy())
+            global player_name
+            player_name = ""
+            home()
+    tk.Button(
+        root,
+        text="Reset Progress",
+        bg="red",
+        fg="white",
+        command=reset_game
+    ).pack(pady=10)
+   
     tk.Button(
         root,
         text="Save",
@@ -768,15 +940,18 @@ def settings_screen():
         fg=WHITE,
         font=("Arial", 14, "bold"),
         command=save_settings
-    ).pack(pady=20)
+    ).pack(pady=10)
 
     tk.Button(
         root,
-        text="⬅ Home",
-        bg=GRAY,
+        text="⬅ Back to Home",
+        font=("Arial",14,"bold"),
+        bg=BLUE,
         fg=WHITE,
+        width=20,
+        height=2,
         command=home
-    ).pack()
+    ).pack(pady=10)
 
 def stats_screen():
     clear()

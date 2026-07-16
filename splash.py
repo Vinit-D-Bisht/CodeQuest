@@ -32,7 +32,10 @@ def show(root, callback):
 
     def animate(count=0):
         dots = "." * (count % 4)
-        loading.config(text=f"Loading{dots}")
+        try:
+            loading.config(text=f"Loading{dots}")
+        except tk.TclError:
+            return
         if count < 20:
             root.after(150, animate, count + 1)
 

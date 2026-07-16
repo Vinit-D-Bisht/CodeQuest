@@ -1,31 +1,39 @@
 import json
+import os
 
-FILE="data/leaderboard.json"
+FILE = os.path.join(os.path.dirname(__file__), "data", "leaderboard.json")
+
+
+def _load():
+    if not os.path.exists(FILE):
+        return []
+
+    try:
+        with open(FILE) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    return data if isinstance(data, list) else []
 
 
 def save_score(name, xp):
-
-    with open(FILE) as f:
-        data=json.load(f)
+    data = _load()
 
     data.append({
-        "name":name,
-        "xp":xp
+        "name": name,
+        "xp": xp
     })
 
-    data.sort(
-        key=lambda x:x["xp"],
-        reverse=True
-    )
+    data.sort(key=lambda x: x["xp"], reverse=True)
+    data = data[:10]
 
-    with open(FILE,"w") as f:
-        json.dump(data[:10],f,indent=4)
+    os.makedirs(os.path.dirname(FILE), exist_ok=True)
+    with open(FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
-
-    return data[:10]
+    return data
 
 
 def get_scores():
-
-    with open(FILE) as f:
-        return json.load(f)
+    return _load()
